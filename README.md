@@ -1,3 +1,22 @@
+## Installation & Running
+
+### Recommended: Ubuntu x86_64 with Rust (Best Performance)
+
+For the most accurate performance benchmarks, run on native Ubuntu x86_64:
+
+```sh
+# Install Rust if not already installed
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+
+# Run the benchmark
+cargo run --release
+```
+
+### Alternative: Docker (All Platforms)
+
+For Mac, Windows, or other platforms, use Docker:
+
 ```sh
 docker buildx build \
   --platform linux/amd64 \
@@ -10,7 +29,7 @@ docker run -it --rm evm_poc_image /bin/bash
 cargo run --release
 ```
 
-⚠️ **Performance Note for macOS Users**: Running this project on macOS with Docker may result in degraded performance that does not accurately reflect the JIT implementation's true capabilities. For reliable performance benchmarking, we recommend running on native Linux or using a Linux VM instead of Docker on macOS.
+⚠️ **Performance Note**: Running with Docker will not show real performance, especially on different CPU architectures. Docker virtualization adds significant overhead that can distort JIT performance measurements. For accurate benchmarking, use Ubuntu x86_64 with native Rust installation.
 
 ## Running experiments
 
