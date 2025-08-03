@@ -1,5 +1,5 @@
 use crate::instructions::opcodes::*;
-use dynasmrt::{DynasmApi, ExecutableBuffer, dynasm};
+use dynasmrt::{DynasmApi, DynasmLabelApi, ExecutableBuffer, dynasm};
 
 /// Builds a JIT function of signature `fn(*mut u64)`
 /// the JIT code uses its first argument (in RDI) as the base pointer
@@ -59,6 +59,124 @@ pub fn make_jit(code: &[u8]) -> ExecutableBuffer {
                     ; pop  rax
                     ; sub  rax, rdx
                     ; push rax
+                );
+                pc += 1;
+            }
+            MUL => {
+                dynasm!(ops
+                    ; pop  rax
+                    ; pop  rdx
+                    ; imul rax, rdx
+                    ; push rax
+                );
+                pc += 1;
+            }
+            DIV => {
+                dynasm!(ops
+                    ; pop  rcx  // divisor
+                    ; pop  rax  // dividend
+                    ; test rcx, rcx
+                    ; jnz  >safe_div
+                    ; xor  rax, rax
+                    ; jmp  >div_done
+                    ; safe_div:
+                    ; xor  rdx, rdx
+                    ; div  rcx
+                    ; div_done:
+                    ; push rax
+                );
+                pc += 1;
+            }
+            MOD => {
+                dynasm!(ops
+                    ; pop  rcx  // divisor
+                    ; pop  rax  // dividend
+                    ; test rcx, rcx
+                    ; jnz  >safe_mod
+                    ; xor  rax, rax
+                    ; jmp  >mod_done
+                    ; safe_mod:
+                    ; xor  rdx, rdx
+                    ; div  rcx
+                    ; mov  rax, rdx
+                    ; mod_done:
+                    ; push rax
+                );
+                pc += 1;
+            }
+            EQ => {
+                dynasm!(ops
+                    ; pop  rax
+                    ; pop  rdx
+                    ; cmp  rax, rdx
+                    ; sete al
+                    ; movzx rax, al
+                    ; push rax
+                );
+                pc += 1;
+            }
+            LT => {
+                dynasm!(ops
+                    ; pop  rdx  // b
+                    ; pop  rax  // a
+                    ; cmp  rax, rdx
+                    ; setb al
+                    ; movzx rax, al
+                    ; push rax
+                );
+                pc += 1;
+            }
+            GT => {
+                dynasm!(ops
+                    ; pop  rdx  // b
+                    ; pop  rax  // a
+                    ; cmp  rax, rdx
+                    ; seta al
+                    ; movzx rax, al
+                    ; push rax
+                );
+                pc += 1;
+            }
+            AND => {
+                dynasm!(ops
+                    ; pop  rax
+                    ; pop  rdx
+                    ; and  rax, rdx
+                    ; push rax
+                );
+                pc += 1;
+            }
+            OR => {
+                dynasm!(ops
+                    ; pop  rax
+                    ; pop  rdx
+                    ; or   rax, rdx
+                    ; push rax
+                );
+                pc += 1;
+            }
+            XOR => {
+                dynasm!(ops
+                    ; pop  rax
+                    ; pop  rdx
+                    ; xor  rax, rdx
+                    ; push rax
+                );
+                pc += 1;
+            }
+            DUP => {
+                dynasm!(ops
+                    ; mov  rax, [rsp]
+                    ; push rax
+                );
+                pc += 1;
+            }
+            SWAP => {
+                dynasm!(ops
+                    ; pop  rax
+                    ; pop  rdx
+                    ; push rax
+                    ; push rdx
                 );
                 pc += 1;
             }

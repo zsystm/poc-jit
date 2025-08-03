@@ -41,6 +41,72 @@ impl VM {
                     self.stack.push(a.wrapping_sub(b));
                     pc += 1;
                 }
+                MUL => {
+                    let b = self.stack.pop().unwrap_or(0);
+                    let a = self.stack.pop().unwrap_or(0);
+                    self.stack.push(a.wrapping_mul(b));
+                    pc += 1;
+                }
+                DIV => {
+                    let b = self.stack.pop().unwrap_or(1);
+                    let a = self.stack.pop().unwrap_or(0);
+                    self.stack.push(if b == 0 { 0 } else { a / b });
+                    pc += 1;
+                }
+                MOD => {
+                    let b = self.stack.pop().unwrap_or(1);
+                    let a = self.stack.pop().unwrap_or(0);
+                    self.stack.push(if b == 0 { 0 } else { a % b });
+                    pc += 1;
+                }
+                EQ => {
+                    let b = self.stack.pop().unwrap_or(0);
+                    let a = self.stack.pop().unwrap_or(0);
+                    self.stack.push(if a == b { 1 } else { 0 });
+                    pc += 1;
+                }
+                LT => {
+                    let b = self.stack.pop().unwrap_or(0);
+                    let a = self.stack.pop().unwrap_or(0);
+                    self.stack.push(if a < b { 1 } else { 0 });
+                    pc += 1;
+                }
+                GT => {
+                    let b = self.stack.pop().unwrap_or(0);
+                    let a = self.stack.pop().unwrap_or(0);
+                    self.stack.push(if a > b { 1 } else { 0 });
+                    pc += 1;
+                }
+                AND => {
+                    let b = self.stack.pop().unwrap_or(0);
+                    let a = self.stack.pop().unwrap_or(0);
+                    self.stack.push(a & b);
+                    pc += 1;
+                }
+                OR => {
+                    let b = self.stack.pop().unwrap_or(0);
+                    let a = self.stack.pop().unwrap_or(0);
+                    self.stack.push(a | b);
+                    pc += 1;
+                }
+                XOR => {
+                    let b = self.stack.pop().unwrap_or(0);
+                    let a = self.stack.pop().unwrap_or(0);
+                    self.stack.push(a ^ b);
+                    pc += 1;
+                }
+                DUP => {
+                    let top = self.stack.last().copied().unwrap_or(0);
+                    self.stack.push(top);
+                    pc += 1;
+                }
+                SWAP => {
+                    if self.stack.len() >= 2 {
+                        let len = self.stack.len();
+                        self.stack.swap(len - 1, len - 2);
+                    }
+                    pc += 1;
+                }
                 STOP => break,
                 _ => panic!("invalid opcode: {}", code[pc]),
             }
