@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 dynasmrt = "1.2"
+rand = "0.8"
