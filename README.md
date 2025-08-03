@@ -53,3 +53,36 @@ Analysis:
 ✓ JIT shows consistent performance benefits across all test sizes
 ✓ JIT achieves significant speedups (>2x) on some workloads
 ```
+
+## Why is JIT So Much Faster?
+
+Both the interpreter and JIT are compiled to machine code, so why does JIT achieve 9-21x speedup? Here are the key reasons:
+
+### 1. **Elimination of Instruction Dispatch Overhead**
+- **Interpreter**: For each bytecode instruction, it must:
+  1. Read the opcode from memory
+  2. Jump to a lookup table or switch statement 
+  3. Execute the corresponding handler function
+  4. Return to the main loop
+  5. Increment the program counter
+  6. Repeat for the next instruction
+
+- **JIT**: Compiles bytecode directly into a sequence of machine instructions with no dispatch overhead. A sequence like `PUSH 5, PUSH 3, ADD` becomes three consecutive machine instructions.
+
+### 2. **Direct Memory Access vs. Abstraction Layers**
+- **Interpreter**: Uses Rust's `HashMap` and `Vec` with bounds checking, memory allocation, and hash computation for storage operations.
+- **JIT**: Uses direct memory access with simple pointer arithmetic (`[rbx + key * 8]` for storage), eliminating all abstraction overhead.
+
+### 3. **Reduced Function Call Overhead**
+- **Interpreter**: Each operation involves function calls to methods like `stack.push()`, `stack.pop()`, `memory.insert()`, `memory.get()`.
+- **JIT**: Operations compile to direct CPU instructions like `push rax`, `pop rdx`, `add rax, rdx`.
+
+### 4. **Better CPU Pipeline Utilization**
+- **Interpreter**: Frequent branches and indirect jumps (switch statements) can cause CPU pipeline stalls and branch mispredictions.
+- **JIT**: Generates linear sequences of instructions that flow naturally through the CPU pipeline.
+
+### 5. **Specialized Code Generation**
+- **Interpreter**: Generic code must handle all possible edge cases and maintain full Rust safety guarantees.
+- **JIT**: Generates specialized assembly code tailored to the specific bytecode sequence being executed.
+
+**Real-world analogy**: Think of the interpreter as a translator who reads each sentence in a foreign language, looks up each word in a dictionary, and then speaks the translation. The JIT is like learning the foreign language fluently - you can understand and respond directly without the lookup overhead.
