@@ -1,0 +1,7 @@
+[package]
+name = "poc-jit"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dynasmrt = "1.2"
