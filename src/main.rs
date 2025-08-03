@@ -107,8 +107,10 @@ struct BenchmarkResults {
     total_cases: usize,
     total_interp_time_ns: u128,
     total_jit_time_ns: u128,
+    total_jit_compile_time_ns: u128,
     avg_interp_time_ns: f64,
     avg_jit_time_ns: f64,
+    avg_jit_compile_time_ns: f64,
     speedup: f64,
     bytecode_length: usize,
 }
@@ -125,14 +127,15 @@ fn main() -> std::io::Result<()> {
     let mut results = Vec::new();
     
     println!("Running comprehensive bytecode benchmarks...");
-    println!("┌─────────┬──────────┬─────────────┬─────────────┬──────────┬──────────┐");
-    println!("│ Size    │ Cases    │ Interpreter │ JIT         │ Speedup  │ Progress │");
-    println!("├─────────┼──────────┼─────────────┼─────────────┼──────────┼──────────┤");
+    println!("┌─────────┬──────────┬─────────────┬─────────────┬─────────────┬──────────┬──────────┐");
+    println!("│ Size    │ Cases    │ Interpreter │ JIT Exec    │ JIT Compile │ Speedup  │ Progress │");
+    println!("├─────────┼──────────┼─────────────┼─────────────┼─────────────┼──────────┼──────────┤");
 
     for config in TEST_CONFIGS {
         let mut rng = rand::rngs::StdRng::seed_from_u64(ts + config.prog_len as u64);
         let mut total_interp_time = 0u128;
         let mut total_jit_time = 0u128;
+        let mut total_jit_compile_time = 0u128;
         
         writeln!(detailed_file, "=== {} TESTS (length: {}, cases: {}) ===", 
                 config.name.to_uppercase(), config.prog_len, config.num_cases)?;
@@ -149,7 +152,9 @@ fn main() -> std::io::Result<()> {
 
             // JIT
             let mut mem = vec![0u64; MEM_SLOTS];
+            let jit_compile_start = Instant::now();
             let buf = make_jit(&code);
+            let jit_compile_time = jit_compile_start.elapsed();
             let entry = buf.ptr(AssemblyOffset(0));
             let jit_fn: extern "C" fn(*mut u64) = unsafe { std::mem::transmute(entry) };
             let t1 = Instant::now();
@@ -158,6 +163,7 @@ fn main() -> std::io::Result<()> {
 
             total_interp_time += interp_time.as_nanos();
             total_jit_time += jit_time.as_nanos();
+            total_jit_compile_time += jit_compile_time.as_nanos();
 
             // Detailed report
             writeln!(detailed_file, "case {} (length: {})", case, code.len())?;
@@ -165,8 +171,9 @@ fn main() -> std::io::Result<()> {
             writeln!(detailed_file, "  interp_stack: {:?}", vm.stack())?;
             writeln!(detailed_file, "  interp_mem: {:?}", vm.memory())?;
             writeln!(detailed_file, "  interp_time_ns: {}", interp_time.as_nanos())?;
+            writeln!(detailed_file, "  jit_compile_time_ns: {}", jit_compile_time.as_nanos())?;
             writeln!(detailed_file, "  jit_mem: {:?}", mem_snapshot(&mem))?;
-            writeln!(detailed_file, "  jit_time_ns: {}", jit_time.as_nanos())?;
+            writeln!(detailed_file, "  jit_exec_time_ns: {}", jit_time.as_nanos())?;
             writeln!(detailed_file, "  speedup: {:.2}x", 
                     interp_time.as_nanos() as f64 / jit_time.as_nanos() as f64)?;
             writeln!(detailed_file)?;
@@ -174,11 +181,12 @@ fn main() -> std::io::Result<()> {
             // Progress indicator
             if case % (config.num_cases / 4).max(1) == 0 || case == config.num_cases - 1 {
                 let progress = (case + 1) * 100 / config.num_cases;
-                print!("\r│ {:7} │ {:8} │ {:11} │ {:11} │ {:8} │ {:7}% │", 
+                print!("\r│ {:7} │ {:8} │ {:11} │ {:11} │ {:11} │ {:8} │ {:7}% │", 
                       config.name, 
                       format!("{}/{}", case + 1, config.num_cases),
                       format!("{}ns", total_interp_time / (case + 1) as u128),
                       format!("{}ns", total_jit_time / (case + 1) as u128),
+                      format!("{}ns", total_jit_compile_time / (case + 1) as u128),
                       format!("{:.2}x", total_interp_time as f64 / total_jit_time as f64),
                       progress);
                 std::io::stdout().flush().unwrap();
@@ -187,6 +195,7 @@ fn main() -> std::io::Result<()> {
 
         let avg_interp = total_interp_time as f64 / config.num_cases as f64;
         let avg_jit = total_jit_time as f64 / config.num_cases as f64;
+        let avg_jit_compile = total_jit_compile_time as f64 / config.num_cases as f64;
         let speedup = avg_interp / avg_jit;
 
         results.push(BenchmarkResults {
@@ -194,8 +203,10 @@ fn main() -> std::io::Result<()> {
             total_cases: config.num_cases,
             total_interp_time_ns: total_interp_time,
             total_jit_time_ns: total_jit_time,
+            total_jit_compile_time_ns: total_jit_compile_time,
             avg_interp_time_ns: avg_interp,
             avg_jit_time_ns: avg_jit,
+            avg_jit_compile_time_ns: avg_jit_compile,
             speedup,
             bytecode_length: config.prog_len,
         });
@@ -203,7 +214,7 @@ fn main() -> std::io::Result<()> {
         println!();
     }
     
-    println!("└─────────┴──────────┴─────────────┴─────────────┴──────────┴──────────┘");
+    println!("└─────────┴──────────┴─────────────┴─────────────┴─────────────┴──────────┴──────────┘");
     println!();
 
     // Write summary report
@@ -217,21 +228,22 @@ fn main() -> std::io::Result<()> {
     writeln!(summary_file)?;
 
     writeln!(summary_file, "Performance Results:")?;
-    writeln!(summary_file, "┌─────────┬─────────┬─────────────┬─────────────┬──────────┬─────────────┐")?;
-    writeln!(summary_file, "│ Size    │ Length  │ Interpreter │ JIT         │ Speedup  │ JIT Benefit │")?;
-    writeln!(summary_file, "├─────────┼─────────┼─────────────┼─────────────┼──────────┼─────────────┤")?;
+    writeln!(summary_file, "┌─────────┬─────────┬─────────────┬─────────────┬──────────────┬──────────┬─────────────┐")?;
+    writeln!(summary_file, "│ Size    │ Length  │ Interpreter │ JIT Exec    │ JIT Compile  │ Speedup  │ JIT Benefit │")?;
+    writeln!(summary_file, "├─────────┼─────────┼─────────────┼─────────────┼──────────────┼──────────┼─────────────┤")?;
     
     for result in &results {
         let benefit = ((result.speedup - 1.0) * 100.0).max(0.0);
-        writeln!(summary_file, "│ {:7} │ {:7} │ {:9.0}ns │ {:9.0}ns │ {:7.2}x │ {:9.1}% │",
+        writeln!(summary_file, "│ {:7} │ {:7} │ {:9.0}ns │ {:9.0}ns │ {:10.0}ns │ {:7.2}x │ {:9.1}% │",
                 result.config_name,
                 result.bytecode_length,
                 result.avg_interp_time_ns,
                 result.avg_jit_time_ns,
+                result.avg_jit_compile_time_ns,
                 result.speedup,
                 benefit)?;
     }
-    writeln!(summary_file, "└─────────┴─────────┴─────────────┴─────────────┴──────────┴─────────────┘")?;
+    writeln!(summary_file, "└─────────┴─────────┴─────────────┴─────────────┴──────────────┴──────────┴─────────────┘")?;
     writeln!(summary_file)?;
 
     // Analysis
@@ -239,12 +251,19 @@ fn main() -> std::io::Result<()> {
     let max_speedup = results.iter().map(|r| r.speedup).fold(0.0, f64::max);
     let min_speedup = results.iter().map(|r| r.speedup).fold(f64::INFINITY, f64::min);
     
+    let avg_compile_time = results.iter().map(|r| r.avg_jit_compile_time_ns).sum::<f64>() / results.len() as f64;
+    let compile_overhead = results.iter()
+        .map(|r| r.avg_jit_compile_time_ns / (r.avg_jit_compile_time_ns + r.avg_jit_time_ns) * 100.0)
+        .sum::<f64>() / results.len() as f64;
+    
     writeln!(summary_file, "Analysis:")?;
     writeln!(summary_file, "  Average speedup: {:.2}x", avg_speedup)?;
     writeln!(summary_file, "  Best speedup: {:.2}x ({})", max_speedup, 
             results.iter().max_by(|a, b| a.speedup.partial_cmp(&b.speedup).unwrap()).unwrap().config_name)?;
     writeln!(summary_file, "  Worst speedup: {:.2}x ({})", min_speedup,
             results.iter().min_by(|a, b| a.speedup.partial_cmp(&b.speedup).unwrap()).unwrap().config_name)?;
+    writeln!(summary_file, "  Average JIT compile time: {:.0}ns", avg_compile_time)?;
+    writeln!(summary_file, "  JIT compile overhead: {:.1}% of total JIT time", compile_overhead)?;
     writeln!(summary_file)?;
     
     if avg_speedup > 1.0 {
@@ -265,6 +284,8 @@ fn main() -> std::io::Result<()> {
     println!("  Average JIT speedup: {:.2}x", avg_speedup);
     println!("  Best performance: {:.2}x on {} bytecode", max_speedup, 
             results.iter().max_by(|a, b| a.speedup.partial_cmp(&b.speedup).unwrap()).unwrap().config_name);
+    println!("  Average JIT compile time: {:.0}ns", avg_compile_time);
+    println!("  JIT compile overhead: {:.1}% of total JIT time", compile_overhead);
     
     Ok(())
 }
